@@ -43,8 +43,8 @@ void VID_InitDefaultResolution( void )
 {
 	// we need to have something valid here
 	// until video subsystem initialized
-	refState.width = 640;
-	refState.height = 480;
+	refState.width = 999;
+	refState.height = 999;
 }
 
 /*
