@@ -86,7 +86,7 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 }
 
 /*
-=================
+================
 VID_GetModeString
 =================
 */
