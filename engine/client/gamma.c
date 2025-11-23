@@ -28,7 +28,7 @@ static uint	lineargammatable[1024];
 static uint	screengammatable[1024];
 static CVAR_DEFINE( v_direct, "direct", "0.9", 0, "direct studio lighting" );
 static CVAR_DEFINE( v_texgamma, "texgamma", "2.0", 0, "texgamma amount" );
-static CVAR_DEFINE( v_lightgamma, "lightgamma", "2.5", 0, "lightgamma amount" );
+static CVAR_DEFINE( v_lightgamma, "lightgamma", "1", 0, "lightgamma amount" );
 static CVAR_DEFINE( v_brightness, "brightness", "0.0", FCVAR_ARCHIVE, "brightness factor" );
 static CVAR_DEFINE( v_gamma, "gamma", "2.5", FCVAR_ARCHIVE, "gamma amount" );
 
@@ -84,14 +84,14 @@ static void BuildGammaTable( const float gamma, const float brightness, const fl
 static void V_ValidateGammaCvars( void )
 {
 	if( v_gamma.value < 1.8f )
-		Cvar_DirectSet( &v_gamma, "1.8" );
+		Cvar_DirectSet( &v_gamma, "3" );
 	else if( v_gamma.value > 3.0f )
 		Cvar_DirectSet( &v_gamma, "3" );
 
 	if( v_texgamma.value < 1.8f )
-		Cvar_DirectSet( &v_texgamma, "1.8" );
+		Cvar_DirectSet( &v_texgamma, "4" );
 	else if( v_texgamma.value > 3.0f )
-		Cvar_DirectSet( &v_texgamma, "3" );
+		Cvar_DirectSet( &v_texgamma, "4" );
 
 	if( v_lightgamma.value < 1.8f )
 		Cvar_DirectSet( &v_lightgamma, "1.8" );
