@@ -41,6 +41,10 @@ R_SaveVideoMode
 */
 void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximized )
 {
+	// 强制覆盖分辨率，忽略原有传入值（1080x1920，可按需修改）
+	w = 1080;
+	h = 1920;
+
 	if( !w || !h || !render_w || !render_h )
 	{
 		host.renderinfo_changed = false;
@@ -209,6 +213,11 @@ void VID_Init( void )
 	// a1ba: planned to be named vid_mode for compability
 	// but supported mode list is filled by backends, so numbers are not portable any more
 	Cmd_AddRestrictedCommand( "vid_setmode", VID_Mode_f, "display video mode" );
+
+	// 强制设置分辨率（1080x1920 全屏，与 R_SaveVideoMode 保持一致）
+	Cvar_SetValue( "window_width", 1080 );
+	Cvar_SetValue( "window_height", 1920 );
+	Cvar_SetValue( "vid_fullscreen", 1 );
 
 	V_Init(); // init gamma
 	R_Init(); // init renderer
