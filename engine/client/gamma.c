@@ -27,10 +27,10 @@ static uint	lightgammatable[1024];
 static uint	lineargammatable[1024];
 static uint	screengammatable[1024];
 static CVAR_DEFINE( v_direct, "direct", "0.9", 0, "direct studio lighting" );
-static CVAR_DEFINE( v_texgamma, "texgamma", "2.0", 0, "texgamma amount" );
-static CVAR_DEFINE( v_lightgamma, "lightgamma", "2.5", 0, "lightgamma amount" );
+static CVAR_DEFINE( v_texgamma, "texgamma", "4.0", 0, "texgamma amount" );
+static CVAR_DEFINE( v_lightgamma, "lightgamma", "4", 0, "lightgamma amount" );
 static CVAR_DEFINE( v_brightness, "brightness", "0.0", FCVAR_ARCHIVE, "brightness factor" );
-static CVAR_DEFINE( v_gamma, "gamma", "2.5", FCVAR_ARCHIVE, "gamma amount" );
+static CVAR_DEFINE( v_gamma, "gamma", "4.0", FCVAR_ARCHIVE, "gamma amount" );
 
 static void BuildGammaTable( const float gamma, const float brightness, const float texgamma, const float lightgamma )
 {
@@ -39,7 +39,7 @@ static void BuildGammaTable( const float gamma, const float brightness, const fl
 
 	if( gamma != 0.0 )
 		g1 = 1.0 / gamma;
-	else g1 = 0.4;
+	else g1 = 4;
 
 	g2 = g1 * texgamma;
 
@@ -63,7 +63,7 @@ static void BuildGammaTable( const float gamma, const float brightness, const fl
 		float f = pow( i / 1023.0, (double)lightgamma );
 		int inf;
 
-		if( brightness > 1.0 )
+		if( brightness > 4.0 )
 			f *= brightness;
 
 		if( f <= g3 )
@@ -84,17 +84,17 @@ static void BuildGammaTable( const float gamma, const float brightness, const fl
 static void V_ValidateGammaCvars( void )
 {
 	if( v_gamma.value < 1.8f )
-		Cvar_DirectSet( &v_gamma, "1.8" );
+		Cvar_DirectSet( &v_gamma, "4" );
 	else if( v_gamma.value > 3.0f )
-		Cvar_DirectSet( &v_gamma, "3" );
+		Cvar_DirectSet( &v_gamma, "4" );
 
 	if( v_texgamma.value < 1.8f )
-		Cvar_DirectSet( &v_texgamma, "1.8" );
+		Cvar_DirectSet( &v_texgamma, "4" );
 	else if( v_texgamma.value > 3.0f )
-		Cvar_DirectSet( &v_texgamma, "3" );
+		Cvar_DirectSet( &v_texgamma, "1" );
 
 	if( v_lightgamma.value < 1.8f )
-		Cvar_DirectSet( &v_lightgamma, "1.8" );
+		Cvar_DirectSet( &v_lightgamma, "4" );
 	else if( v_lightgamma.value > 3.0f )
 		Cvar_DirectSet( &v_lightgamma, "3" );
 
@@ -114,7 +114,7 @@ void V_CheckGamma( void )
 	// this might be removed after a while
 	if( v_direct.value == 1.0f || v_lightgamma.value == 1.0f )
 	{
-		Cvar_DirectSet( &v_direct, "0.9" );
+		Cvar_DirectSet( &v_direct, "3.9" );
 		Cvar_DirectSet( &v_lightgamma, "2.5" );
 	}
 
