@@ -20,6 +20,9 @@ GNU General Public License for more details.
 #include "vid_common.h"
 #include "platform/platform.h"
 
+#define CUSTOM_SCREEN_WIDTH  640
+#define CUSTOM_SCREEN_HEIGHT 480
+
 static CVAR_DEFINE_AUTO( vid_mode, "0", FCVAR_RENDERINFO, "current video mode index (used only for storage)" );
 static CVAR_DEFINE_AUTO( vid_rotate, "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen rotation (0-3)" );
 static CVAR_DEFINE_AUTO( vid_scale, "1.0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "pixel scale" );
@@ -33,11 +36,6 @@ CVAR_DEFINE( window_ypos, "_window_ypos", "-1", FCVAR_RENDERINFO, "window positi
 
 glwstate_t	glw_state;
 
-/*
-=================
-R_SaveVideoMode
-=================
-*/
 void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximized )
 {
 	if( !w || !h || !render_w || !render_h )
@@ -53,8 +51,6 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 	Cvar_SetValue( "height", h );
 	Cvar_DirectSet( &vid_maximized, maximized ? "1" : "0" );
 	
-	// immediately drop changed state or we may trigger
-	// video subsystem to reapply settings
 	host.renderinfo_changed = false;
 
 	if( refState.width == render_w && refState.height == render_h )
@@ -63,19 +59,13 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 	refState.width = render_w;
 	refState.height = render_h;
 
-	// check for 4:3 or 5:4
 	if( render_w * 3 != render_h * 4 && render_w * 4 != render_h * 5 )
 		refState.wideScreen = true;
 	else refState.wideScreen = false;
 
-	SCR_VidInit(); // tell client.dll that vid_mode has changed
+	SCR_VidInit();
 }
 
-/*
-=================
-VID_GetModeString
-=================
-*/
 const char *VID_GetModeString( int vid_mode )
 {
 	vidmode_t *vidmode;
@@ -84,47 +74,13 @@ const char *VID_GetModeString( int vid_mode )
 
 	if( !( vidmode = R_GetVideoMode( vid_mode ) ) )
 		return NULL;
-
-	return vidmode->desc;
+	else
+	{
+		Sys_Error( "Can't re-initialize video subsystem\n" );
+	}
+	host.renderinfo_changed = false;
 }
 
-/*
-==================
-VID_CheckChanges
-
-check vid modes and fullscreen
-==================
-*/
-void VID_CheckChanges( void )
-{
-	if( FBitSet( cl_allow_levelshots.flags, FCVAR_CHANGED ))
-	{
-		//GL_FreeTexture( cls.loadingBar );
-		SCR_RegisterTextures(); // reload 'lambda' image
-		ClearBits( cl_allow_levelshots.flags, FCVAR_CHANGED );
-	}
-
-	if( host.renderinfo_changed )
-	{
-		if( VID_SetMode( ))
-		{
-			SCR_VidInit(); // tell the client.dll what vid_mode has changed
-		}
-		else
-		{
-			Sys_Error( "Can't re-initialize video subsystem\n" );
-		}
-		host.renderinfo_changed = false;
-	}
-}
-
-/*
-===============
-VID_SetDisplayTransform
-
-notify ref dll about screen transformations
-===============
-*/
 void VID_SetDisplayTransform( int *render_w, int *render_h )
 {
 	uint rotate = vid_rotate.value;
@@ -186,13 +142,14 @@ static void VID_Mode_f( void )
 		Msg( S_USAGE "vid_mode <modenum>|<width height>\n" );
 		return;
 	}
-
 	R_ChangeDisplaySettings( w, h, bound( 0, vid_fullscreen.value, WINDOW_MODE_COUNT - 1 ));
 }
 
 void VID_Init( void )
 {
-	// system screen width and height (don't suppose for change from console at all)
+	Cvar_SetValue("width", CUSTOM_SCREEN_WIDTH);
+	Cvar_SetValue("height", CUSTOM_SCREEN_HEIGHT);
+
 	Cvar_RegisterVariable( &window_width );
 	Cvar_RegisterVariable( &window_height );
 
@@ -204,10 +161,8 @@ void VID_Init( void )
 	Cvar_RegisterVariable( &window_xpos );
 	Cvar_RegisterVariable( &window_ypos );
 
-	// a1ba: planned to be named vid_mode for compability
-	// but supported mode list is filled by backends, so numbers are not portable any more
 	Cmd_AddRestrictedCommand( "vid_setmode", VID_Mode_f, "display video mode" );
 
-	V_Init(); // init gamma
-	R_Init(); // init renderer
-}
+	V_Init();
+	R_Init();
+	}
