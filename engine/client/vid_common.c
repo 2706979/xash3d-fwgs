@@ -23,6 +23,9 @@ GNU General Public License for more details.
 #define CUSTOM_SCREEN_WIDTH  640
 #define CUSTOM_SCREEN_HEIGHT 480
 
+// 声明R_ChangeDisplaySettings原型（解决隐式声明问题）
+void R_ChangeDisplaySettings( int w, int h, int mode );
+
 static CVAR_DEFINE_AUTO( vid_mode, "0", FCVAR_RENDERINFO, "current video mode index (used only for storage)" );
 static CVAR_DEFINE_AUTO( vid_rotate, "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen rotation (0-3)" );
 static CVAR_DEFINE_AUTO( vid_scale, "1.0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "pixel scale" );
@@ -72,13 +75,12 @@ const char *VID_GetModeString( int vid_mode )
 	if( vid_mode < 0 || vid_mode >= R_MaxVideoModes() )
 		return NULL;
 
-	if( !( vidmode = R_GetVideoMode( vid_mode ) ) )
+	vidmode = R_GetVideoMode( vid_mode );
+	if( !vidmode )
 		return NULL;
-	else
-	{
-		Sys_Error( "Can't re-initialize video subsystem\n" );
-	}
-	host.renderinfo_changed = false;
+
+	// 修复：返回模式字符串（原逻辑错误）
+	return va( "%dx%d", vidmode->width, vidmode->height );
 }
 
 void VID_SetDisplayTransform( int *render_w, int *render_h )
