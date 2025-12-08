@@ -1,6 +1,6 @@
 /*
 vid_common.c - common vid component
-Copyright (C) 2018 a1batross, Uncle Mike
+Copyright (C) 2018 a1batros, Uncle Mike
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
