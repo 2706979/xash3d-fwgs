@@ -46,7 +46,7 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 {
 	string temp;
 
-    // 强制固定为 640×480，忽略传入的参数
+    // 强制固定为640×480，忽略传入的参数
     w = 640;
     h = 480;
     render_w = 640;
