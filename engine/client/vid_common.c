@@ -26,12 +26,14 @@ static CVAR_DEFINE_AUTO( vid_scale, "1.0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "p
 
 CVAR_DEFINE_AUTO( vid_maximized, "0", FCVAR_RENDERINFO, "window maximized state, read-only" );
 CVAR_DEFINE( vid_fullscreen, "fullscreen", DEFAULT_FULLSCREEN, FCVAR_RENDERINFO|FCVAR_VIDRESTART, "fullscreen state (0 windowed, 1 fullscreen, 2 borderless)" );
-CVAR_DEFINE( window_width, "width", "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen width" );
-CVAR_DEFINE( window_height, "height", "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen height" );
+// 强制默认分辨率为 640×480，移除 FCVAR_VIDRESTART 防止重启修改
+CVAR_DEFINE( window_width, "width", "640", FCVAR_RENDERINFO, "screen width" );
+CVAR_DEFINE( window_height, "height", "480", FCVAR_RENDERINFO, "screen height" );
 CVAR_DEFINE( window_xpos, "_window_xpos", "-1", FCVAR_RENDERINFO, "window position by horizontal" );
 CVAR_DEFINE( window_ypos, "_window_ypos", "-1", FCVAR_RENDERINFO, "window position by vertical" );
-CVAR_DEFINE( vid_width, "vid_width", "0", FCVAR_READ_ONLY, "actual window viewport size" );
-CVAR_DEFINE( vid_height, "vid_height", "0", FCVAR_READ_ONLY, "actual window viewport size" );
+// 强制实际渲染分辨率为 640×480
+CVAR_DEFINE( vid_width, "vid_width", "640", FCVAR_READ_ONLY, "actual window viewport size" );
+CVAR_DEFINE( vid_height, "vid_height", "480", FCVAR_READ_ONLY, "actual window viewport size" );
 
 glwstate_t	glw_state;
 
@@ -43,6 +45,12 @@ R_SaveVideoMode
 void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximized )
 {
 	string temp;
+
+    // 强制固定为 640×480，忽略传入的参数
+    w = 640;
+    h = 480;
+    render_w = 640;
+    render_h = 480;
 
 	if( !w || !h || !render_w || !render_h )
 	{
@@ -80,8 +88,8 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 	refState.width = render_w;
 	refState.height = render_h;
 
-	// check for 4:3 or 5:4
-	refState.wideScreen = render_w * 3 != render_h * 4 && render_w * 4 != render_h * 5;
+	// 强制设置为 4:3 比例，禁用宽屏判断
+	refState.wideScreen = false;
 
 	SCR_VidInit(); // tell client.dll that vid_mode has changed
 }
@@ -172,37 +180,11 @@ void VID_SetDisplayTransform( int *render_w, int *render_h )
 
 static void VID_Mode_f( void )
 {
-	int w, h;
+    // 强制 vid_setmode 命令固定为 640×480，忽略传入参数
+    int w = 640;
+    int h = 480;
 
-	switch( Cmd_Argc() )
-	{
-	case 2:
-	{
-		vidmode_t *vidmode;
-
-		vidmode = R_GetVideoMode( Q_atoi( Cmd_Argv( 1 )) );
-		if( !vidmode )
-		{
-			Con_Printf( S_ERROR "unable to set mode, backend returned null\n" );
-			return;
-		}
-
-		w = vidmode->width;
-		h = vidmode->height;
-		break;
-	}
-	case 3:
-	{
-		w = Q_atoi( Cmd_Argv( 1 ));
-		h = Q_atoi( Cmd_Argv( 2 ));
-		break;
-	}
-	default:
-		Msg( S_USAGE "vid_mode <modenum>|<width height>\n" );
-		return;
-	}
-
-	R_ChangeDisplaySettings( w, h, bound( 0, vid_fullscreen.value, WINDOW_MODE_COUNT - 1 ));
+    R_ChangeDisplaySettings( w, h, bound( 0, vid_fullscreen.value, WINDOW_MODE_COUNT - 1 ));
 }
 
 void VID_Init( void )
