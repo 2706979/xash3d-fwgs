@@ -25,13 +25,14 @@ static CVAR_DEFINE_AUTO( vid_rotate, "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "sc
 static CVAR_DEFINE_AUTO( vid_scale, "1.0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "pixel scale" );
 
 CVAR_DEFINE_AUTO( vid_maximized, "0", FCVAR_RENDERINFO, "window maximized state, read-only" );
-CVAR_DEFINE( vid_fullscreen, "fullscreen", DEFAULT_FULLSCREEN, FCVAR_RENDERINFO|FCVAR_VIDRESTART, "fullscreen state (0 windowed, 1 fullscreen, 2 borderless)" );
-// 强制默认分辨率为 640×480，移除 FCVAR_VIDRESTART 防止重启修改
+// 固化默认全屏模式：1=普通全屏，2=无边框全屏
+CVAR_DEFINE( vid_fullscreen, "fullscreen", "1", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "fullscreen state (0 windowed, 1 fullscreen, 2 borderless)" );
+// 强制默认分辨率为640×480，移除FCVAR_VIDRESTART防止修改
 CVAR_DEFINE( window_width, "width", "640", FCVAR_RENDERINFO, "screen width" );
 CVAR_DEFINE( window_height, "height", "480", FCVAR_RENDERINFO, "screen height" );
 CVAR_DEFINE( window_xpos, "_window_xpos", "-1", FCVAR_RENDERINFO, "window position by horizontal" );
 CVAR_DEFINE( window_ypos, "_window_ypos", "-1", FCVAR_RENDERINFO, "window position by vertical" );
-// 强制实际渲染分辨率为 640×480
+// 强制实际渲染分辨率为640×480
 CVAR_DEFINE( vid_width, "vid_width", "640", FCVAR_READ_ONLY, "actual window viewport size" );
 CVAR_DEFINE( vid_height, "vid_height", "480", FCVAR_READ_ONLY, "actual window viewport size" );
 
@@ -88,7 +89,7 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 	refState.width = render_w;
 	refState.height = render_h;
 
-	// 强制设置为 4:3 比例，禁用宽屏判断
+	// 强制设置为4:3比例，禁用宽屏判断
 	refState.wideScreen = false;
 
 	SCR_VidInit(); // tell client.dll that vid_mode has changed
@@ -180,7 +181,7 @@ void VID_SetDisplayTransform( int *render_w, int *render_h )
 
 static void VID_Mode_f( void )
 {
-    // 强制 vid_setmode 命令固定为 640×480，忽略传入参数
+    // 强制vid_setmode命令固定为640×480，忽略传入参数
     int w = 640;
     int h = 480;
 
