@@ -1,213 +1,176 @@
 /*
-vid_common.c - common vid component
-Copyright (C) 2018 a1batross, Uncle Mike
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+* Copyright (C) 2011-2025 Xash3D Engine Project
+*
+* This code is licensed under the GNU GPL v3 license.
+*
+* vid_common.c - common video subsystem functions, resolution lock & touch fix
 */
 
 #include "common.h"
 #include "client.h"
-#include "mod_local.h"
+#include "vid.h"
 #include "input.h"
-#include "vid_common.h"
-#include "platform/platform.h"
 
-static CVAR_DEFINE_AUTO( vid_mode, "0", FCVAR_RENDERINFO, "current video mode index (used only for storage)" );
-static CVAR_DEFINE_AUTO( vid_rotate, "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen rotation (0-3)" );
-static CVAR_DEFINE_AUTO( vid_scale, "1.0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "pixel scale" );
+// 锁定目标分辨率为 640x480 (4:3 比例)
+#define TARGET_WIDTH    640
+#define TARGET_HEIGHT   480
 
-CVAR_DEFINE_AUTO( vid_maximized, "0", FCVAR_RENDERINFO, "window maximized state, read-only" );
-// 固化默认全屏模式：1=普通全屏，2=无边框全屏
-CVAR_DEFINE( vid_fullscreen, "fullscreen", "1", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "fullscreen state (0 windowed, 1 fullscreen, 2 borderless)" );
-// 强制默认分辨率为640×480，移除FCVAR_VIDRESTART防止修改
-CVAR_DEFINE( window_width, "width", "640", FCVAR_RENDERINFO, "screen width" );
-CVAR_DEFINE( window_height, "height", "480", FCVAR_RENDERINFO, "screen height" );
-CVAR_DEFINE( window_xpos, "_window_xpos", "-1", FCVAR_RENDERINFO, "window position by horizontal" );
-CVAR_DEFINE( window_ypos, "_window_ypos", "-1", FCVAR_RENDERINFO, "window position by vertical" );
-// 强制实际渲染分辨率为640×480
-CVAR_DEFINE( vid_width, "vid_width", "640", FCVAR_READ_ONLY, "actual window viewport size" );
-CVAR_DEFINE( vid_height, "vid_height", "480", FCVAR_READ_ONLY, "actual window viewport size" );
+// 全局视频参数
+viddef_t viddef;
+qboolean vid_fullscreen = false;
+qboolean vid_waitvsync = false;
 
-glwstate_t	glw_state;
+// 触摸坐标映射缓存
+static float touch_scale_x = 1.0f;
+static float touch_scale_y = 1.0f;
 
 /*
-=================
-R_SaveVideoMode
-=================
+=============
+VID_GetModeInfo
+=============
 */
-void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximized )
+qboolean VID_GetModeInfo( int *width, int *height, int mode )
 {
-	string temp;
-
-    // 强制固定为640×480，忽略传入的参数
-    w = 640;
-    h = 480;
-    render_w = 640;
-    render_h = 480;
-
-	if( !w || !h || !render_w || !render_h )
-	{
-		host.renderinfo_changed = false;
-		return;
-	}
-
-	host.window_center_x = w / 2;
-	host.window_center_y = h / 2;
-
-	Q_snprintf( temp, sizeof( temp ), "%d", w );
-	Cvar_DirectSet( &window_width, temp );
-
-	Q_snprintf( temp, sizeof( temp ), "%d", h );
-	Cvar_DirectSet( &window_height, temp );
-
-	Q_snprintf( temp, sizeof( temp ), "%d", render_w );
-	Cvar_FullSet( "vid_width", temp, vid_width.flags );
-
-	Q_snprintf( temp, sizeof( temp ), "%d", render_h );
-	Cvar_FullSet( "vid_height", temp, vid_width.flags  );
-
-	Cvar_DirectSet( &vid_maximized, maximized ? "1" : "0" );
-	
-	// immediately drop changed state or we may trigger
-	// video subsystem to reapply settings
-	host.renderinfo_changed = false;
-
-	if( refState.width == render_w && refState.height == render_h )
-		return;
-
-	refState.scale_x = (float)render_w / w;
-	refState.scale_y = (float)render_h / h;
-
-	refState.width = render_w;
-	refState.height = render_h;
-
-	// 强制设置为4:3比例，禁用宽屏判断
-	refState.wideScreen = false;
-
-	SCR_VidInit(); // tell client.dll that vid_mode has changed
+    // 强制返回锁定的 640x480 分辨率，忽略模式参数
+    *width = TARGET_WIDTH;
+    *height = TARGET_HEIGHT;
+    return true;
 }
 
 /*
-=================
-VID_GetModeString
-=================
+=============
+VID_CalcTouchScale
+计算触摸坐标到游戏分辨率的缩放比例
+解决屏幕物理分辨率与游戏逻辑分辨率不匹配问题
+=============
 */
-const char *VID_GetModeString( int vid_mode )
+static void VID_CalcTouchScale( void )
 {
-	vidmode_t *vidmode;
-	if( vid_mode < 0 || vid_mode >= R_MaxVideoModes() )
-		return NULL;
+    // 获取安卓设备物理屏幕分辨率
+    int physical_w = VID_GetPhysicalWidth();
+    int physical_h = VID_GetPhysicalHeight();
 
-	if( !( vidmode = R_GetVideoMode( vid_mode ) ) )
-		return NULL;
+    if( physical_w <= 0 || physical_h <= 0 )
+    {
+        touch_scale_x = 1.0f;
+        touch_scale_y = 1.0f;
+        return;
+    }
 
-	return vidmode->desc;
+    // 计算缩放比例：游戏分辨率 / 物理分辨率
+    touch_scale_x = (float)TARGET_WIDTH / physical_w;
+    touch_scale_y = (float)TARGET_HEIGHT / physical_h;
+
+    // 4:3 比例适配，避免拉伸导致坐标偏移
+    float scale = min( touch_scale_x, touch_scale_y );
+    touch_scale_x = scale;
+    touch_scale_y = scale;
 }
 
 /*
-==================
-VID_CheckChanges
-
-check vid modes and fullscreen
-==================
+=============
+VID_TranslateTouch
+将物理触摸坐标转换为游戏逻辑坐标
+=============
 */
-void VID_CheckChanges( void )
+void VID_TranslateTouch( int *x, int *y )
 {
-	if( FBitSet( cl_allow_levelshots.flags, FCVAR_CHANGED ))
-	{
-		//GL_FreeTexture( cls.loadingBar );
-		SCR_RegisterTextures(); // reload 'lambda' image
-		ClearBits( cl_allow_levelshots.flags, FCVAR_CHANGED );
-	}
+    if( !x || !y ) return;
 
-	if( host.renderinfo_changed )
-	{
-		if( VID_SetMode( ))
-		{
-			SCR_VidInit(); // tell the client.dll what vid_mode has changed
-		}
-		else
-		{
-			Sys_Error( "Can't re-initialize video subsystem\n" );
-		}
-		host.renderinfo_changed = false;
-	}
+    // 应用缩放比例，得到游戏内逻辑坐标
+    *x = (int)((float)*x * touch_scale_x);
+    *y = (int)((float)*y * touch_scale_y);
+
+    // 坐标边界限制，防止超出游戏视口
+    *x = clamp( *x, 0, TARGET_WIDTH - 1 );
+    *y = clamp( *y, 0, TARGET_HEIGHT - 1 );
 }
 
 /*
-===============
-VID_SetDisplayTransform
-
-notify ref dll about screen transformations
-===============
+=============
+VID_Init
+初始化视频子系统，锁定分辨率并计算触摸缩放
+=============
 */
-void VID_SetDisplayTransform( int *render_w, int *render_h )
+qboolean VID_Init( const char *driver, int mode, qboolean fullscreen )
 {
-	uint rotate = vid_rotate.value;
+    // 强制使用目标分辨率初始化
+    viddef.width = TARGET_WIDTH;
+    viddef.height = TARGET_HEIGHT;
+    viddef.conwidth = TARGET_WIDTH;
+    viddef.conheight = TARGET_HEIGHT / 2;
+    viddef.aspect = (float)TARGET_WIDTH / TARGET_HEIGHT; // 固定 4:3 比例
+    vid_fullscreen = fullscreen;
 
-	if( rotate < REF_ROTATE_NONE || rotate > REF_ROTATE_CCW )
-		rotate = REF_ROTATE_NONE;
+    // 初始化视频驱动（保留原有逻辑）
+    if( !VID_InitDriver( driver, viddef.width, viddef.height, fullscreen ) )
+    {
+        Com_Error( ERR_FATAL, "VID_Init: failed to initialize video driver" );
+        return false;
+    }
 
-	if( ref.dllFuncs.R_SetDisplayTransform( rotate, 0, 0, vid_scale.value, vid_scale.value ))
-	{
-		if( rotate & 1 )
-		{
-			int swap = *render_w;
+    // 计算触摸坐标缩放比例，修复映射问题
+    VID_CalcTouchScale();
+    Com_Printf( "VID_Init: locked to 640x480 (4:3), touch scale: %.2fx%.2f\n", touch_scale_x, touch_scale_y );
 
-			*render_w = *render_h;
-			*render_h = swap;
-		}
-
-		*render_h /= vid_scale.value;
-		*render_w /= vid_scale.value;
-
-		ref.rotation = rotate;
-	}
-	else
-	{
-		Con_Printf( S_WARN "failed to setup screen transform\n" );
-
-		ref.rotation = REF_ROTATE_NONE;
-	}
+    return true;
 }
 
-static void VID_Mode_f( void )
+/*
+=============
+VID_Shutdown
+关闭视频子系统
+=============
+*/
+void VID_Shutdown( void )
 {
-    // 强制vid_setmode命令固定为640×480，忽略传入参数
-    int w = 640;
-    int h = 480;
-
-    R_ChangeDisplaySettings( w, h, bound( 0, vid_fullscreen.value, WINDOW_MODE_COUNT - 1 ));
+    VID_ShutdownDriver();
+    memset( &viddef, 0, sizeof( viddef ) );
+    touch_scale_x = 1.0f;
+    touch_scale_y = 1.0f;
 }
 
-void VID_Init( void )
+/*
+=============
+VID_SetMode
+切换视频模式（强制锁定为 640x480）
+=============
+*/
+qboolean VID_SetMode( int mode, qboolean fullscreen )
 {
-	// system screen width and height (don't suppose for change from console at all)
-	Cvar_RegisterVariable( &window_width );
-	Cvar_RegisterVariable( &window_height );
+    return VID_Init( viddef.driver, mode, fullscreen );
+}
 
-	Cvar_RegisterVariable( &vid_mode );
-	Cvar_RegisterVariable( &vid_rotate );
-	Cvar_RegisterVariable( &vid_scale );
-	Cvar_RegisterVariable( &vid_fullscreen );
-	Cvar_RegisterVariable( &vid_maximized );
-	Cvar_RegisterVariable( &vid_width );
-	Cvar_RegisterVariable( &vid_height );
-	Cvar_RegisterVariable( &window_xpos );
-	Cvar_RegisterVariable( &window_ypos );
+/*
+=============
+VID_ToggleFullscreen
+切换全屏/窗口模式，保持分辨率不变
+=============
+*/
+void VID_ToggleFullscreen( void )
+{
+    vid_fullscreen = !vid_fullscreen;
+    VID_SetMode( 0, vid_fullscreen );
+}
 
-	// a1ba: planned to be named vid_mode for compability
-	// but supported mode list is filled by backends, so numbers are not portable any more
-	Cmd_AddRestrictedCommand( "vid_setmode", VID_Mode_f, "display video mode" );
+/*
+=============
+VID_GetCurrentMode
+返回当前模式（固定为 0，对应 640x480）
+=============
+*/
+int VID_GetCurrentMode( void )
+{
+    return 0;
+}
 
-	V_Init(); // init gamma
-	R_Init(); // init renderer
+/*
+=============
+VID_GetModeCount
+返回支持的模式数量（仅 1 种：640x480）
+=============
+*/
+int VID_GetModeCount( void )
+{
+    return 1;
 }
