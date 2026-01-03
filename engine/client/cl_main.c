@@ -17,6 +17,7 @@ GNU General Public License for more details.
 #include "client.h"
 #include "net_encode.h"
 #include "cl_tent.h"
+#include "cl_esp.h"
 #include "input.h"
 #include "kbutton.h"
 #include "vgui_draw.h"
