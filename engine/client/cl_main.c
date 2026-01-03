@@ -3582,7 +3582,7 @@ void CL_Init( void )
 	S_Init();	// init sound
 	Voice_Init( VOICE_DEFAULT_CODEC, 3, true ); // init voice (do not open the device)
 
-	// unreliable buffer. unsed for unreliable commands and voice stream
+	// unreliable buffer. unused for unreliable commands and voice stream
 	MSG_Init( &cls.datagram, "cls.datagram", cls.datagram_buf, sizeof( cls.datagram_buf ));
 
 	COM_GetCommonLibraryPath( LIBRARY_CLIENT, libpath, sizeof( libpath ));
@@ -3597,6 +3597,7 @@ void CL_Init( void )
 	cl.maxclients = 1; // allow to drawing player in menu
 	cls.olddemonum = -1;
 	cls.demonum = -1;
+	ESP_Init(); // 初始化ESP功能
 }
 
 /*
@@ -3615,7 +3616,6 @@ void CL_Shutdown( void )
 		Host_WriteVideoConfig ();
 		Touch_WriteConfig();
 	}
-
 	Joy_Shutdown ();
 	CL_CloseDemoHeader ();
 	IN_Shutdown ();
@@ -3623,6 +3623,8 @@ void CL_Shutdown( void )
 	SCR_Shutdown ();
 	CL_UnloadProgs ();
 	cls.initialized = false;
+	ESP_Shutdown(); // 关闭ESP资源
+}
 
 	// for client-side VGUI support we use other order
 	if( FI && FI->GameInfo && !FI->GameInfo->internal_vgui_support )
