@@ -23,23 +23,23 @@ public class XashActivity extends SDLActivity {
 	private String mPackageName;
 	private static final String TAG = "XashActivity";
 
+	// 1. 新增JNI方法声明：用于传递自定义分辨率给Native层
+	public native void nativeSetCustomResolution(int width, int height);
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		// 保持横屏，与native层强制分辨率的宽高比匹配
 		setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-		
-		// 刘海屏适配，避免黑边遮挡画面
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
 			getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
 		}
 
-		// 修复部分设备触摸偏移bug，必须保留（触摸正常的核心）
 		AndroidBug5497Workaround.assistActivity(this);
-		
-		// 保持屏幕常亮，避免游戏中息屏
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+		// 2. 调用JNI设置分辨率：这里改成你想要的尺寸，比如 1280x720
+		nativeSetCustomResolution(1280, 720);
 	}
 
 	@Override
@@ -108,9 +108,9 @@ public class XashActivity extends SDLActivity {
 
 		int keyCode = event.getKeyCode();
 		if (!mUseVolumeKeys) {
-			if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP || 
-				keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_ZOOM_IN || 
-				keyCode == KeyEvent.KEYCODE_ZOOM_OUT) {
+			if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+					keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_ZOOM_IN ||
+					keyCode == KeyEvent.KEYCODE_ZOOM_OUT) {
 				return false;
 			}
 		}
@@ -151,9 +151,10 @@ public class XashActivity extends SDLActivity {
 
 		if (argv.indexOf(" -dll ") < 0 && gamelibdir == null) {
 			final List<String> mobile_hacks_gamedirs = Arrays.asList(new String[]{
-				"aom", "bdlands", "biglolly", "bshift", "caseclosed",
-				"hl_urbicide", "induction", "redempt", "secret",
-				"sewer_beta", "tot", "vendetta" });
+					"aom", "bdlands", "biglolly", "bshift", "caseclosed",
+					"hl_urbicide", "induction", "redempt", "secret",
+					"sewer_beta", "tot", "vendetta"
+			});
 
 			if (mobile_hacks_gamedirs.contains(gamedir))
 				argv += " -dll @hl";
@@ -161,4 +162,4 @@ public class XashActivity extends SDLActivity {
 
 		return argv.split(" ");
 	}
-								}
+	}
