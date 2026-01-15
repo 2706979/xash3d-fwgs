@@ -27,23 +27,24 @@ public class XashActivity extends SDLActivity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
+		// 保持横屏，与native层强制分辨率的宽高比匹配
 		setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+		
+		// 刘海屏适配，避免黑边遮挡画面
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-			//getWindow().addFlags(WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES);
 			getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
 		}
 
+		// 修复部分设备触摸偏移bug，必须保留（触摸正常的核心）
 		AndroidBug5497Workaround.assistActivity(this);
+		
+		// 保持屏幕常亮，避免游戏中息屏
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 	}
 
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
-
-		// Now that we don't exit from native code, we need to exit here, resetting
-		// application state (actually global variables that we don't cleanup on exit)
-		//
-		// When the issue with global variables will be resolved, remove that exit() call
 		System.exit(0);
 	}
 
@@ -71,13 +72,11 @@ public class XashActivity extends SDLActivity {
 		if (mPackageName != null) {
 			return mPackageName;
 		}
-
 		return super.getCallingPackage();
 	}
 
 	private AssetManager getAssets(boolean isEngine) {
 		AssetManager am = null;
-
 		if (isEngine) {
 			am = getAssets();
 		} else {
@@ -88,19 +87,16 @@ public class XashActivity extends SDLActivity {
 				e.printStackTrace();
 			}
 		}
-
 		return am;
 	}
 
 	private String[] getAssetsList(boolean isEngine, String path) {
 		AssetManager am = getAssets(isEngine);
-
 		try {
 			return am.list(path);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-
 		return new String[]{};
 	}
 
@@ -112,15 +108,15 @@ public class XashActivity extends SDLActivity {
 
 		int keyCode = event.getKeyCode();
 		if (!mUseVolumeKeys) {
-			if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_ZOOM_IN || keyCode == KeyEvent.KEYCODE_ZOOM_OUT) {
+			if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP || 
+				keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_ZOOM_IN || 
+				keyCode == KeyEvent.KEYCODE_ZOOM_OUT) {
 				return false;
 			}
 		}
-
 		return getWindow().superDispatchKeyEvent(event);
 	}
 
-	// TODO: REMOVE LATER, temporary launchers support?
 	@Override
 	protected String[] getArguments() {
 		String gamedir = getIntent().getStringExtra("gamedir");
@@ -153,9 +149,7 @@ public class XashActivity extends SDLActivity {
 		String argv = getIntent().getStringExtra("argv");
 		if (argv == null) argv = "-console -log";
 
-		// stupid check but should be enough
 		if (argv.indexOf(" -dll ") < 0 && gamelibdir == null) {
-			// mobile_hacks hlsdk-portable branch allows us to have few more mods
 			final List<String> mobile_hacks_gamedirs = Arrays.asList(new String[]{
 				"aom", "bdlands", "biglolly", "bshift", "caseclosed",
 				"hl_urbicide", "induction", "redempt", "secret",
@@ -167,4 +161,4 @@ public class XashActivity extends SDLActivity {
 
 		return argv.split(" ");
 	}
-}
+								}
