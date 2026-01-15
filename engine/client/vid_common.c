@@ -19,6 +19,8 @@ GNU General Public License for more details.
 #include "input.h"
 #include "vid_common.h"
 #include "platform/platform.h"
+// 1. 添加JNI头文件（根据你的NDK路径调整，或使用自动生成的头文件）
+#include <jni.h>
 
 static CVAR_DEFINE_AUTO( vid_mode, "0", FCVAR_RENDERINFO, "current video mode index (used only for storage)" );
 static CVAR_DEFINE_AUTO( vid_rotate, "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen rotation (0-3)" );
@@ -40,6 +42,10 @@ glwstate_t	glw_state;
 #define FORCE_HEIGHT 1080  // 强制高度
 // *********************************************************
 
+// 2. 新增全局变量：接收Java层传递的分辨率
+static int g_custom_width = 0;
+static int g_custom_height = 0;
+
 /*
 =================
 R_SaveVideoMode
@@ -49,12 +55,22 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 {
 	string temp;
 
-	// ********** 强制替换为固定分辨率 **********
-	w = FORCE_WIDTH;
-	h = FORCE_HEIGHT;
-	render_w = FORCE_WIDTH;
-	render_h = FORCE_HEIGHT;
-	// ******************************************
+	// 3. 分辨率优先级：Java层传参 > 宏定义固定分辨率
+	if(g_custom_width > 0 && g_custom_height > 0)
+	{
+		w = g_custom_width;
+		h = g_custom_height;
+		render_w = g_custom_width;
+		render_h = g_custom_height;
+	}
+	else
+	{
+		// 使用原来的宏定义固定分辨率
+		w = FORCE_WIDTH;
+		h = FORCE_HEIGHT;
+		render_w = FORCE_WIDTH;
+		render_h = FORCE_HEIGHT;
+	}
 
 	if( !w || !h || !render_w || !render_h )
 	{
@@ -84,10 +100,9 @@ void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximiz
 	if( refState.width == render_w && refState.height == render_h )
 		return;
 
-	// ********** 强制关闭缩放比例 **********
+	// 强制关闭缩放比例
 	refState.scale_x = 1.0f;
 	refState.scale_y = 1.0f;
-	// **************************************
 
 	refState.width = render_w;
 	refState.height = render_h;
@@ -141,21 +156,6 @@ void VID_CheckChanges( void )
 	}
 }
 
-/*
-===============
-VID_SetDisplayTransform
-===============
-*/
-void VID_SetDisplayTransform( int *render_w, int *render_h )
-{
-	// ********** 强制替换为固定分辨率，关闭旋转和缩放 **********
-	*render_w = FORCE_WIDTH;
-	*render_h = FORCE_HEIGHT;
-	ref.rotation = REF_ROTATE_NONE;
-	ref.dllFuncs.R_SetDisplayTransform( REF_ROTATE_NONE, 0, 0, 1.0f, 1.0f );
-	// **********************************************************
-}
-
 static void VID_Mode_f( void )
 {
 	int w, h;
@@ -164,11 +164,18 @@ static void VID_Mode_f( void )
 	{
 	case 2:
 	case 3:
-		// ********** 强制使用固定分辨率，忽略输入参数 **********
-		w = FORCE_WIDTH;
-		h = FORCE_HEIGHT;
+		// 使用优先级分辨率
+		if(g_custom_width > 0 && g_custom_height > 0)
+		{
+			w = g_custom_width;
+			h = g_custom_height;
+		}
+		else
+		{
+			w = FORCE_WIDTH;
+			h = FORCE_HEIGHT;
+		}
 		break;
-	// **********************************************************
 	default:
 		Msg( S_USAGE "vid_mode <modenum>|<width height>\n" );
 		return;
@@ -177,20 +184,27 @@ static void VID_Mode_f( void )
 	R_ChangeDisplaySettings( w, h, bound( 0, vid_fullscreen.value, WINDOW_MODE_COUNT - 1 ));
 }
 
-void VID_Init( void )
+// 4. 实现JNI方法：接收Java层传递的分辨率
+JNIEXPORT void JNICALL Java_su_xash_engine_XashActivity_nativeSetCustomResolution
+  (JNIEnv *env, jobject obj, jint width, jint height)
 {
- 	Cvar_RegisterVariable( &window_width );
- 	Cvar_RegisterVariable( &window_height );
- 	Cvar_RegisterVariable( &vid_mode );
- 	Cvar_RegisterVariable( &vid_rotate );
- 	Cvar_RegisterVariable( &vid_scale );
- 	Cvar_RegisterVariable( &vid_fullscreen );
- 	Cvar_RegisterVariable( &vid_maximized );
- 	Cvar_RegisterVariable( &vid_width );
- 	Cvar_RegisterVariable( &vid_height );
- 	Cvar_RegisterVariable( &window_xpos );
- 	Cvar_RegisterVariable( &window_ypos );
- 	Cmd_AddRestrictedCommand( "vid_setmode", VID_Mode_f, "display video mode" );
- 	V_Init();
- 	R_Init();
-}
+	g_custom_width = width;
+ 	g_custom_height = height;
+ }
+ void VID_Init( void )
+ {
+  	Cvar_RegisterVariable( &window_width );
+  	Cvar_RegisterVariable( &window_height );
+  	Cvar_RegisterVariable( &vid_mode );
+  	Cvar_RegisterVariable( &vid_rotate );
+  	Cvar_RegisterVariable( &vid_scale );
+  	Cvar_RegisterVariable( &vid_fullscreen );
+  	Cvar_RegisterVariable( &vid_maximized );
+  	Cvar_RegisterVariable( &vid_width );
+  	Cvar_RegisterVariable( &vid_height );
+  	Cvar_RegisterVariable( &window_xpos );
+  	Cvar_RegisterVariable( &window_ypos );
+  	Cmd_AddRestrictedCommand( "vid_setmode", VID_Mode_f, "display video mode" );
+  	V_Init();
+  	R_Init();
+ }
