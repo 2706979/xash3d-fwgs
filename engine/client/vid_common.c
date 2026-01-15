@@ -6,11 +6,6 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
 */
 
 #include "common.h"
@@ -20,102 +15,77 @@ GNU General Public License for more details.
 #include "vid_common.h"
 #include "platform/platform.h"
 
-static CVAR_DEFINE_AUTO( vid_mode, "0", FCVAR_RENDERINFO, "current video mode index (used only for storage)" );
-static CVAR_DEFINE_AUTO( vid_rotate, "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen rotation (0-3)" );
-static CVAR_DEFINE_AUTO( vid_scale, "1.0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "pixel scale" );
+// 强制分辨率宏定义
+#define FORCED_WIDTH  680
+#define FORCED_HEIGHT 481
 
-CVAR_DEFINE_AUTO( vid_maximized, "0", FCVAR_RENDERINFO, "window maximized state, read-only" );
-CVAR_DEFINE( vid_fullscreen, "fullscreen", DEFAULT_FULLSCREEN, FCVAR_RENDERINFO|FCVAR_VIDRESTART, "fullscreen state (0 windowed, 1 fullscreen, 2 borderless)" );
-CVAR_DEFINE( window_width, "width", "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen width" );
-CVAR_DEFINE( window_height, "height", "0", FCVAR_RENDERINFO|FCVAR_VIDRESTART, "screen height" );
-CVAR_DEFINE( window_xpos, "_window_xpos", "-1", FCVAR_RENDERINFO, "window position by horizontal" );
-CVAR_DEFINE( window_ypos, "_window_ypos", "-1", FCVAR_RENDERINFO, "window position by vertical" );
-CVAR_DEFINE( vid_width, "vid_width", "0", FCVAR_READ_ONLY, "actual window viewport size" );
-CVAR_DEFINE( vid_height, "vid_height", "0", FCVAR_READ_ONLY, "actual window viewport size" );
+static CVAR_DEFINE_AUTO( vid_mode, "0", FCVAR_RENDERINFO | FCVAR_READ_ONLY, "current video mode index (used only for storage)" );
+static CVAR_DEFINE_AUTO( vid_rotate, "0", FCVAR_RENDERINFO | FCVAR_VIDRESTART | FCVAR_READ_ONLY, "screen rotation (0-3)" );
+static CVAR_DEFINE_AUTO( vid_scale, "1.0", FCVAR_RENDERINFO | FCVAR_VIDRESTART | FCVAR_READ_ONLY, "pixel scale" );
+
+CVAR_DEFINE_AUTO( vid_maximized, "0", FCVAR_RENDERINFO | FCVAR_READ_ONLY, "window maximized state, read-only" );
+CVAR_DEFINE( vid_fullscreen, "fullscreen", "0", FCVAR_RENDERINFO | FCVAR_VIDRESTART, "fullscreen state (0 windowed, 1 fullscreen, 2 borderless)" );
+CVAR_DEFINE( window_width, "width", "680", FCVAR_RENDERINFO | FCVAR_VIDRESTART | FCVAR_READ_ONLY, "screen width" );
+CVAR_DEFINE( window_height, "height", "481", FCVAR_RENDERINFO | FCVAR_VIDRESTART | FCVAR_READ_ONLY, "screen height" );
+CVAR_DEFINE( window_xpos, "_window_xpos", "0", FCVAR_RENDERINFO | FCVAR_READ_ONLY, "window position by horizontal" );
+CVAR_DEFINE( window_ypos, "_window_ypos", "0", FCVAR_RENDERINFO | FCVAR_READ_ONLY, "window position by vertical" );
+CVAR_DEFINE( vid_width, "vid_width", "680", FCVAR_READ_ONLY, "actual window viewport size" );
+CVAR_DEFINE( vid_height, "vid_height", "481", FCVAR_READ_ONLY, "actual window viewport size" );
 
 glwstate_t	glw_state;
 
-/*
-=================
-R_SaveVideoMode
-=================
-*/
 void R_SaveVideoMode( int w, int h, int render_w, int render_h, qboolean maximized )
 {
 	string temp;
 
-	if( !w || !h || !render_w || !render_h )
-	{
-		host.renderinfo_changed = false;
-		return;
-	}
+	// 强制覆盖所有传入参数为目标分辨率
+	w = FORCED_WIDTH;
+	h = FORCED_HEIGHT;
+	render_w = FORCED_WIDTH;
+	render_h = FORCED_HEIGHT;
+	maximized = false; // 禁用最大化，避免分辨率被拉伸
 
 	host.window_center_x = w / 2;
 	host.window_center_y = h / 2;
 
+	// 强制写入CVAR，防止被引擎其他模块修改
 	Q_snprintf( temp, sizeof( temp ), "%d", w );
 	Cvar_DirectSet( &window_width, temp );
-
 	Q_snprintf( temp, sizeof( temp ), "%d", h );
 	Cvar_DirectSet( &window_height, temp );
-
 	Q_snprintf( temp, sizeof( temp ), "%d", render_w );
 	Cvar_FullSet( "vid_width", temp, vid_width.flags );
-
 	Q_snprintf( temp, sizeof( temp ), "%d", render_h );
-	Cvar_FullSet( "vid_height", temp, vid_width.flags  );
-
-	Cvar_DirectSet( &vid_maximized, maximized ? "1" : "0" );
+	Cvar_FullSet( "vid_height", temp, vid_height.flags  );
+	Cvar_DirectSet( &vid_maximized, "0" );
 	
-	// immediately drop changed state or we may trigger
-	// video subsystem to reapply settings
 	host.renderinfo_changed = false;
 
-	if( refState.width == render_w && refState.height == render_h )
-		return;
-
-	refState.scale_x = (float)render_w / w;
-	refState.scale_y = (float)render_h / h;
-
+	// 强制重置渲染状态，避免缩放偏移
+	refState.scale_x = 1.0f;
+	refState.scale_y = 1.0f;
 	refState.width = render_w;
 	refState.height = render_h;
+	refState.wideScreen = (render_w * 3 != render_h * 4) && (render_w * 4 != render_h * 5);
 
-	// check for 4:3 or 5:4
-	refState.wideScreen = render_w * 3 != render_h * 4 && render_w * 4 != render_h * 5;
-
-	SCR_VidInit(); // tell client.dll that vid_mode has changed
+	SCR_VidInit();
 }
 
-/*
-=================
-VID_GetModeString
-=================
-*/
 const char *VID_GetModeString( int vid_mode )
 {
 	vidmode_t *vidmode;
 	if( vid_mode < 0 || vid_mode >= R_MaxVideoModes() )
 		return NULL;
-
 	if( !( vidmode = R_GetVideoMode( vid_mode ) ) )
 		return NULL;
-
 	return vidmode->desc;
 }
 
-/*
-==================
-VID_CheckChanges
-
-check vid modes and fullscreen
-==================
-*/
 void VID_CheckChanges( void )
 {
 	if( FBitSet( cl_allow_levelshots.flags, FCVAR_CHANGED ))
 	{
-		//GL_FreeTexture( cls.loadingBar );
-		SCR_RegisterTextures(); // reload 'lambda' image
+		SCR_RegisterTextures();
 		ClearBits( cl_allow_levelshots.flags, FCVAR_CHANGED );
 	}
 
@@ -123,7 +93,7 @@ void VID_CheckChanges( void )
 	{
 		if( VID_SetMode( ))
 		{
-			SCR_VidInit(); // tell the client.dll what vid_mode has changed
+			SCR_VidInit();
 		}
 		else
 		{
@@ -133,84 +103,25 @@ void VID_CheckChanges( void )
 	}
 }
 
-/*
-===============
-VID_SetDisplayTransform
-
-notify ref dll about screen transformations
-===============
-*/
 void VID_SetDisplayTransform( int *render_w, int *render_h )
 {
-	uint rotate = vid_rotate.value;
-
-	if( rotate < REF_ROTATE_NONE || rotate > REF_ROTATE_CCW )
-		rotate = REF_ROTATE_NONE;
-
-	if( ref.dllFuncs.R_SetDisplayTransform( rotate, 0, 0, vid_scale.value, vid_scale.value ))
-	{
-		if( rotate & 1 )
-		{
-			int swap = *render_w;
-
-			*render_w = *render_h;
-			*render_h = swap;
-		}
-
-		*render_h /= vid_scale.value;
-		*render_w /= vid_scale.value;
-
-		ref.rotation = rotate;
-	}
-	else
-	{
-		Con_Printf( S_WARN "failed to setup screen transform\n" );
-
-		ref.rotation = REF_ROTATE_NONE;
-	}
+	// 强制关闭旋转和缩放，直接赋值目标分辨率
+	*render_w = FORCED_WIDTH;
+	*render_h = FORCED_HEIGHT;
+	ref.rotation = REF_ROTATE_NONE;
 }
 
 static void VID_Mode_f( void )
 {
-	int w, h;
-
-	switch( Cmd_Argc() )
-	{
-	case 2:
-	{
-		vidmode_t *vidmode;
-
-		vidmode = R_GetVideoMode( Q_atoi( Cmd_Argv( 1 )) );
-		if( !vidmode )
-		{
-			Con_Printf( S_ERROR "unable to set mode, backend returned null\n" );
-			return;
-		}
-
-		w = vidmode->width;
-		h = vidmode->height;
-		break;
-	}
-	case 3:
-	{
-		w = Q_atoi( Cmd_Argv( 1 ));
-		h = Q_atoi( Cmd_Argv( 2 ));
-		break;
-	}
-	default:
-		Msg( S_USAGE "vid_mode <modenum>|<width height>\n" );
-		return;
-	}
-
-	R_ChangeDisplaySettings( w, h, bound( 0, vid_fullscreen.value, WINDOW_MODE_COUNT - 1 ));
+	// 强制应用680×481分辨率，忽略控制台参数
+	R_ChangeDisplaySettings( FORCED_WIDTH, FORCED_HEIGHT, bound( 0, vid_fullscreen.value, WINDOW_MODE_COUNT - 1 ));
+	Con_Printf( "Video mode locked to %dx%d\n", FORCED_WIDTH, FORCED_HEIGHT );
 }
 
 void VID_Init( void )
 {
-	// system screen width and height (don't suppose for change from console at all)
 	Cvar_RegisterVariable( &window_width );
 	Cvar_RegisterVariable( &window_height );
-
 	Cvar_RegisterVariable( &vid_mode );
 	Cvar_RegisterVariable( &vid_rotate );
 	Cvar_RegisterVariable( &vid_scale );
@@ -221,10 +132,11 @@ void VID_Init( void )
 	Cvar_RegisterVariable( &window_xpos );
 	Cvar_RegisterVariable( &window_ypos );
 
-	// a1ba: planned to be named vid_mode for compability
-	// but supported mode list is filled by backends, so numbers are not portable any more
 	Cmd_AddRestrictedCommand( "vid_setmode", VID_Mode_f, "display video mode" );
 
-	V_Init(); // init gamma
-	R_Init(); // init renderer
+	V_Init();
+	R_Init();
+
+	// 初始化时直接强制设置窗口位置和尺寸，避免偏移
+	R_ChangeDisplaySettings( FORCED_WIDTH, FORCED_HEIGHT, vid_fullscreen.value );
 }
